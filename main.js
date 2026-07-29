@@ -142,7 +142,7 @@ async function generateAltText(imagePath) {
 
     const result = await response.json();
     const description = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    return description ? description.trim().replace(/\n/g, ' ') : 'No description generated.';
+    return description ? description.trim() : 'No description generated.';
   } catch (err) {
     return `Error: ${err.message}`;
   }
@@ -265,15 +265,20 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
       }
     }
 
-    // Write the accessibility report CSV
-    let csvContent = 'Page URL,Screenshot Filename,Generated Alt-Text\n';
+    // Write the accessibility report TXT file
+    let txtContent = 'SITESHOT ACCESSIBILITY REPORT\n';
+    txtContent += '==================================================\n';
+    txtContent += `Generated: ${new Date().toLocaleString()}\n`;
+    txtContent += '==================================================\n\n';
+
     for (const r of results) {
-      const safeUrl = `"${r.url.replace(/"/g, '""')}"`;
-      const safeFilename = `"${r.filename.replace(/"/g, '""')}"`;
-      const safeAltText = `"${r.altText.replace(/"/g, '""')}"`;
-      csvContent += `${safeUrl},${safeFilename},${safeAltText}\n`;
+      txtContent += `PAGE URL: ${r.url}\n`;
+      txtContent += `SCREENSHOT: ${r.filename}\n`;
+      txtContent += '--------------------------------------------------\n';
+      txtContent += `${r.altText}\n`;
+      txtContent += '==================================================\n\n';
     }
-    fs.writeFileSync(path.join(outputDir, 'accessibility_report.csv'), csvContent, 'utf-8');
+    fs.writeFileSync(path.join(outputDir, 'accessibility_report.txt'), txtContent, 'utf-8');
 
     await browser.close();
     event.reply('capture-complete', outputDir);
