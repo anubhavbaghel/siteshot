@@ -1,0 +1,29 @@
+{
+  "name": "siteshot-desktop",
+  "version": "1.1.0",
+  "description": "Ultra-lightweight functional website screenshot crawler",
+  "author": "SiteShot Team",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-packager . SiteShot --platform=win32 --arch=x64 --out=dist --overwrite",
+    "build": "electron-builder --win"
+  },
+  "dependencies": {
+    "puppeteer-core": "^21.6.0"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1",
+    "electron-packager": "^17.1.2"
+  },
+  "build": {
+    "appId": "com.siteshot.desktop",
+    "win": {
+      "target": "nsis"
+    },
+    "directories": {
+      "output": "dist-installer"
+    }
+  }
+}
