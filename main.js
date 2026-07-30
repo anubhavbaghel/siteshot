@@ -200,6 +200,7 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
     const visitedUrls = new Set();
     const queue = [{ url: targetUrl, depth: 0 }];
     const pagesToCapture = [];
+    const pageTitles = {};
 
     // Step 1: Discover internal pages on the landing page
     event.reply('capture-status', { text: 'Discovering website pages...', progress: 10 });
@@ -207,21 +208,44 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
     await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
     pagesToCapture.push(targetUrl);
     visitedUrls.add(targetUrl.split('#')[0].replace(/\/$/, ''));
+    
+    let landingTitle = await page.title();
+    landingTitle = landingTitle ? landingTitle.trim() : 'Home';
+    pageTitles[targetUrl.split('#')[0].replace(/\/$/, '')] = landingTitle;
 
     const links = await page.evaluate(() => {
       return Array.from(document.querySelectorAll('a'))
-        .map(a => a.href)
-        .filter(href => href.startsWith('http'));
+        .filter(a => a.href && a.href.startsWith('http'))
+        .map(a => ({
+          href: a.href,
+          text: a.innerText.trim() || a.getAttribute('aria-label') || ''
+        }));
     });
 
-    for (const link of links) {
+    for (const item of links) {
       try {
-        const linkParsed = new URL(link);
+        const linkParsed = new URL(item.href);
         if (linkParsed.hostname === startUrlParsed.hostname) {
-          const normalized = link.split('#')[0].replace(/\/$/, '');
+          const normalized = item.href.split('#')[0].replace(/\/$/, '');
+          
+          if (!pageTitles[normalized]) {
+            let cleanText = item.text.replace(/[\r\n\t]+/g, ' ').trim();
+            if (!cleanText) {
+              const pathParts = linkParsed.pathname.split('/').filter(Boolean);
+              if (pathParts.length > 0) {
+                cleanText = pathParts[pathParts.length - 1]
+                  .replace(/[-_]/g, ' ')
+                  .replace(/\b\w/g, c => c.toUpperCase());
+              } else {
+                cleanText = 'Home';
+              }
+            }
+            pageTitles[normalized] = cleanText;
+          }
+
           if (!visitedUrls.has(normalized)) {
             visitedUrls.add(normalized);
-            pagesToCapture.push(link);
+            pagesToCapture.push(item.href);
           }
         }
       } catch (err) {}
@@ -241,6 +265,9 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
         progress: progressPercent 
       });
 
+      const normalizedUrl = url.split('#')[0].replace(/\/$/, '');
+      const pageTitle = pageTitles[normalizedUrl] || 'Home';
+
       try {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         await autoScroll(page);
@@ -259,26 +286,306 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
         });
 
         const altText = await generateAltText(filepath);
-        results.push({ url, filename, altText });
+        results.push({ url, filename, pageTitle, altText });
       } catch (e) {
-        results.push({ url, filename: 'failed', altText: `Failed to capture: ${e.message}` });
+        results.push({ url, filename: 'failed', pageTitle, altText: `Failed to capture: ${e.message}` });
       }
     }
 
-    // Write the accessibility report TXT file
-    let txtContent = 'SITESHOT ACCESSIBILITY REPORT\n';
-    txtContent += '==================================================\n';
-    txtContent += `Generated: ${new Date().toLocaleString()}\n`;
-    txtContent += '==================================================\n\n';
+    // Write the accessibility report HTML file
+    let htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SiteShot Accessibility Report - ${siteName}</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-color: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --border: #334155;
+    }
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+      padding: 2.5rem 2rem;
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 2.2rem;
+      letter-spacing: -0.025em;
+      color: #60a5fa;
+    }
+    header p {
+      margin: 0.5rem 0 0 0;
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+    .page-section {
+      background-color: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 2.5rem;
+      overflow: hidden;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    }
+    .page-header {
+      background-color: rgba(255, 255, 255, 0.03);
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-header h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      color: #93c5fd;
+    }
+    .page-content {
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      gap: 1.5rem;
+    }
+    @media (min-width: 768px) {
+      .page-content {
+        flex-direction: row;
+      }
+    }
+    .screenshot-column {
+      flex: 1;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .screenshot-thumbnail {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: zoom-in;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .screenshot-thumbnail:hover {
+      transform: scale(1.02);
+      border-color: var(--accent);
+    }
+    .screenshot-link {
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .screenshot-link:hover {
+      color: var(--accent);
+    }
+    .alts-column {
+      flex: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .alt-block {
+      background-color: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      position: relative;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+    .alt-block:hover {
+      border-color: var(--accent);
+      background-color: rgba(59, 130, 246, 0.05);
+    }
+    .image-label {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      font-weight: bold;
+    }
+    .alt-text-content {
+      font-size: 1rem;
+      line-height: 1.5;
+      color: var(--text-color);
+      white-space: pre-wrap;
+    }
+    .alt-block.copied {
+      border-color: var(--success) !important;
+      background-color: rgba(16, 185, 129, 0.08) !important;
+    }
+    .copy-hint {
+      position: absolute;
+      top: 0.8rem;
+      right: 1rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .alt-block:hover .copy-hint {
+      opacity: 1;
+    }
+    /* Toast styles */
+    .toast-container {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: var(--success);
+      color: white;
+      padding: 0.8rem 1.5rem;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s, bottom 0.3s;
+    }
+    .toast-container.show {
+      opacity: 1;
+      bottom: 2.5rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SiteShot Accessibility Report</h1>
+    <p>Site: <strong>${siteName.replace(/_/g, '.')}</strong> | Generated: ${new Date().toLocaleString()}</p>
+  </header>
+  <div class="container">
+`;
 
     for (const r of results) {
-      txtContent += `PAGE URL: ${r.url}\n`;
-      txtContent += `SCREENSHOT: ${r.filename}\n`;
-      txtContent += '--------------------------------------------------\n';
-      txtContent += `${r.altText}\n`;
-      txtContent += '==================================================\n\n';
+      const lines = r.altText.split('\n').filter(l => l.trim());
+      let altBlocksHtml = '';
+      
+      let currentLabel = 'Image Description';
+      let currentContent = '';
+      
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j].trim();
+        if (line.endsWith(':') || (j + 1 < lines.length && (line.toLowerCase().includes('image') || line.toLowerCase().includes('heading') || line.toLowerCase().includes('logo') || line.toLowerCase().includes('banner') || line.toLowerCase().includes('gallery')))) {
+          if (currentContent) {
+            altBlocksHtml += `
+          <div class="alt-block" onclick="copyAltText(this)">
+            <div class="image-label">${currentLabel.replace(/:$/, '')}</div>
+            <div class="alt-text-content">${currentContent.trim()}</div>
+            <span class="copy-hint">Click to copy</span>
+          </div>`;
+            currentContent = '';
+          }
+          currentLabel = line;
+        } else {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx > 0 && colonIdx < 30) {
+            if (currentContent) {
+              altBlocksHtml += `
+            <div class="alt-block" onclick="copyAltText(this)">
+              <div class="image-label">${currentLabel.replace(/:$/, '')}</div>
+              <div class="alt-text-content">${currentContent.trim()}</div>
+              <span class="copy-hint">Click to copy</span>
+            </div>`;
+              currentContent = '';
+            }
+            const label = line.substring(0, colonIdx).trim();
+            const text = line.substring(colonIdx + 1).trim();
+            altBlocksHtml += `
+          <div class="alt-block" onclick="copyAltText(this)">
+            <div class="image-label">${label}</div>
+            <div class="alt-text-content">${text}</div>
+            <span class="copy-hint">Click to copy</span>
+          </div>`;
+          } else {
+            currentContent += (currentContent ? '\n' : '') + line;
+          }
+        }
+      }
+      
+      if (currentContent || currentLabel) {
+        altBlocksHtml += `
+          <div class="alt-block" onclick="copyAltText(this)">
+            <div class="image-label">${currentLabel.replace(/:$/, '')}</div>
+            <div class="alt-text-content">${(currentContent || currentLabel).trim()}</div>
+            <span class="copy-hint">Click to copy</span>
+          </div>`;
+      }
+
+      htmlContent += `
+    <div class="page-section">
+      <div class="page-header">
+        <h2>${r.pageTitle}</h2>
+      </div>
+      <div class="page-content">
+        <div class="screenshot-column">
+          <a href="${r.filename}" target="_blank">
+            <img class="screenshot-thumbnail" src="${r.filename}" alt="${r.pageTitle} Screenshot">
+          </a>
+          <a class="screenshot-link" href="${r.filename}" target="_blank">View full-size screenshot</a>
+        </div>
+        <div class="alts-column">
+          ${altBlocksHtml || `<div style="color: var(--text-muted);">No images found or analyzed.</div>`}
+        </div>
+      </div>
+    </div>
+`;
     }
-    fs.writeFileSync(path.join(outputDir, 'accessibility_report.txt'), txtContent, 'utf-8');
+
+    htmlContent += `
+  </div>
+  <div class="toast-container" id="toast">Alt-text copied to clipboard!</div>
+
+  <script>
+    function copyAltText(element) {
+      const text = element.querySelector('.alt-text-content').innerText;
+      
+      navigator.clipboard.writeText(text).then(() => {
+        // Flash animation
+        element.classList.add('copied');
+        
+        // Show Toast
+        const toast = document.getElementById('toast');
+        toast.innerText = 'Copied: "' + (text.length > 40 ? text.substring(0, 40) + '...' : text) + '"';
+        toast.classList.add('show');
+        
+        setTimeout(() => {
+          element.classList.remove('copied');
+        }, 1000);
+        
+        setTimeout(() => {
+          toast.classList.remove('show');
+        }, 2000);
+      }).catch(err => {
+        console.error('Could not copy text: ', err);
+      });
+    }
+  </script>
+</body>
+</html>`;
+
+    fs.writeFileSync(path.join(outputDir, `Siteshot_${siteName}_Alts.html`), htmlContent, 'utf-8');
 
     await browser.close();
     event.reply('capture-complete', outputDir);
