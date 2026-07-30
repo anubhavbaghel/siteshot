@@ -479,56 +479,20 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
 `;
 
     for (const r of results) {
-      const lines = r.altText.split('\n').filter(l => l.trim());
+      const lines = r.altText.split('\n').map(l => l.trim()).filter(Boolean);
       let altBlocksHtml = '';
       
-      let currentLabel = 'Image Description';
-      let currentContent = '';
-      
-      for (let j = 0; j < lines.length; j++) {
-        const line = lines[j].trim();
-        if (line.endsWith(':') || (j + 1 < lines.length && (line.toLowerCase().includes('image') || line.toLowerCase().includes('heading') || line.toLowerCase().includes('logo') || line.toLowerCase().includes('banner') || line.toLowerCase().includes('gallery')))) {
-          if (currentContent) {
-            altBlocksHtml += `
-          <div class="alt-block" onclick="copyAltText(this)">
-            <div class="image-label">${currentLabel.replace(/:$/, '')}</div>
-            <div class="alt-text-content">${currentContent.trim()}</div>
-            <span class="copy-hint">Click to copy</span>
-          </div>`;
-            currentContent = '';
-          }
-          currentLabel = line;
-        } else {
-          const colonIdx = line.indexOf(':');
-          if (colonIdx > 0 && colonIdx < 30) {
-            if (currentContent) {
-              altBlocksHtml += `
-            <div class="alt-block" onclick="copyAltText(this)">
-              <div class="image-label">${currentLabel.replace(/:$/, '')}</div>
-              <div class="alt-text-content">${currentContent.trim()}</div>
-              <span class="copy-hint">Click to copy</span>
-            </div>`;
-              currentContent = '';
-            }
-            const label = line.substring(0, colonIdx).trim();
-            const text = line.substring(colonIdx + 1).trim();
-            altBlocksHtml += `
-          <div class="alt-block" onclick="copyAltText(this)">
-            <div class="image-label">${label}</div>
-            <div class="alt-text-content">${text}</div>
-            <span class="copy-hint">Click to copy</span>
-          </div>`;
-          } else {
-            currentContent += (currentContent ? '\n' : '') + line;
-          }
-        }
-      }
-      
-      if (currentContent || currentLabel) {
+      for (let j = 0; j < lines.length; j += 2) {
+        const label = lines[j];
+        const text = lines[j + 1] || 'No description.';
+        
+        const cleanLabel = label.replace(/^[-*\s]+/, '').replace(/:$/, '').trim();
+        const cleanText = text.replace(/^[-*\s]+/, '').trim();
+        
         altBlocksHtml += `
           <div class="alt-block" onclick="copyAltText(this)">
-            <div class="image-label">${currentLabel.replace(/:$/, '')}</div>
-            <div class="alt-text-content">${(currentContent || currentLabel).trim()}</div>
+            <div class="image-label">${cleanLabel}</div>
+            <div class="alt-text-content">${cleanText}</div>
             <span class="copy-hint">Click to copy</span>
           </div>`;
       }
