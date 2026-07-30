@@ -108,30 +108,40 @@ function getDecryptedApiKey() {
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || getDecryptedApiKey();
 
-// Helper to generate alt-text using Gemini API
-async function generateAltText(imagePath) {
+// Helper to generate alt-text for all captured pages in a single API call
+async function generateAllAltTexts(pagesData) {
   let retries = 4;
-  let delay = 3000; // start with 3 seconds
+  let delay = 4000; // start with 4 seconds
   
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const imageBuffer = fs.readFileSync(imagePath);
-      const base64Image = imageBuffer.toString('base64');
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+      const parts = [];
       
-      const payload = {
-        contents: [{
-          parts: [
-            { text: "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images. Format the output with the image name/location on one line, followed by the alt-text on the next line (with no bullet points, hyphens, or prefixes on the alt-text line itself) so it can be double-clicked to select and copy. Do not include any introduction, greetings, or explanations. Start directly with the first image name." },
-            {
-              inlineData: {
-                mimeType: "image/png",
-                data: base64Image
-              }
-            }
-          ]
-        }]
-      };
+      let prompt = "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images. Format the output with the image name/location on one line, followed by the alt-text on the next line (with no bullet points, hyphens, or prefixes on the alt-text line itself) so it can be double-clicked to select and copy.\n\n";
+      prompt += "I will give you multiple page screenshots. You must output the results page-wise, in the exact order of the screenshots provided.\n";
+      prompt += "For each page, start directly with the Page Name as a header line (using the exact page titles listed below), followed by the list of image locations and alt-texts.\n";
+      prompt += "Do not write any introductory sentences, conversational filler, greetings, or conclusions. Start directly with the first Page Name.\n\n";
+      prompt += "The screenshots are provided in this ordering:\n";
+      
+      pagesData.forEach((p, idx) => {
+        prompt += `Screenshot ${idx + 1}: ${p.pageTitle}\n`;
+      });
+      
+      parts.push({ text: prompt });
+      
+      pagesData.forEach(p => {
+        const imageBuffer = fs.readFileSync(p.filepath);
+        const base64Image = imageBuffer.toString('base64');
+        parts.push({
+          inlineData: {
+            mimeType: "image/png",
+            data: base64Image
+          }
+        });
+      });
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+      const payload = { contents: [{ parts }] };
 
       const response = await fetch(url, {
         method: 'POST',
@@ -150,21 +160,73 @@ async function generateAltText(imagePath) {
 
       if (!response.ok) {
         const errText = await response.text();
-        return `Failed to generate alt-text (${response.status})`;
+        throw new Error(`API error (${response.status}): ${errText}`);
       }
 
       const result = await response.json();
       const description = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      return description ? description.trim() : 'No description generated.';
+      return description ? description.trim() : '';
     } catch (err) {
       if (attempt < retries - 1) {
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2;
         continue;
       }
-      return `Error: ${err.message}`;
+      throw err;
     }
   }
+}
+
+// Parses single multi-page AI response back into individual pages
+function parseMultiPageAltTexts(rawText, pagesData) {
+  const results = pagesData.map(p => ({
+    url: p.url,
+    filename: p.filename,
+    pageTitle: p.pageTitle,
+    altText: ''
+  }));
+
+  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  
+  let currentPageIndex = -1;
+  let currentPageLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Normalize and search if this line is a page title separator
+    const cleanLine = line.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    
+    let matchedIndex = -1;
+    for (let j = 0; j < pagesData.length; j++) {
+      const cleanTitle = pagesData[j].pageTitle.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      if (cleanLine === cleanTitle || (cleanLine.length > 5 && (cleanLine.includes(cleanTitle) || cleanTitle.includes(cleanLine)))) {
+        matchedIndex = j;
+        break;
+      }
+    }
+    
+    if (matchedIndex !== -1) {
+      if (currentPageIndex !== -1 && currentPageLines.length > 0) {
+        results[currentPageIndex].altText = currentPageLines.join('\n');
+      }
+      currentPageIndex = matchedIndex;
+      currentPageLines = [];
+    } else {
+      if (currentPageIndex !== -1) {
+        currentPageLines.push(line);
+      } else {
+        currentPageIndex = 0; // Fallback to first page
+        currentPageLines.push(line);
+      }
+    }
+  }
+
+  if (currentPageIndex !== -1 && currentPageLines.length > 0) {
+    results[currentPageIndex].altText = currentPageLines.join('\n');
+  }
+
+  return results;
 }
 
 // Normalize URLs to filenames
@@ -272,12 +334,12 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
 
     // Limit to max 15 pages to keep it fast/lightweight
     const totalPages = Math.min(pagesToCapture.length, 15);
-    const results = [];
+    const pagesData = [];
 
-    // Step 2: Capture screenshots and generate alt-text
+    // Step 2: Capture screenshots
     for (let i = 0; i < totalPages; i++) {
       const url = pagesToCapture[i];
-      const progressPercent = 20 + Math.round((i / totalPages) * 75);
+      const progressPercent = 20 + Math.round((i / totalPages) * 60); // 20% to 80% for capturing
       
       event.reply('capture-status', { 
         text: `Capturing page ${i + 1}/${totalPages}...`, 
@@ -299,16 +361,45 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
           fullPage: true
         });
 
-        event.reply('capture-status', { 
-          text: `Generating AI Alt-Text for page ${i + 1}/${totalPages}...`, 
-          progress: Math.min(progressPercent + 3, 95)
-        });
-
-        const altText = await generateAltText(filepath);
-        results.push({ url, filename, pageTitle, altText });
+        pagesData.push({ url, filename, filepath, pageTitle });
       } catch (e) {
-        results.push({ url, filename: 'failed', pageTitle, altText: `Failed to capture: ${e.message}` });
+        pagesData.push({ url, filename: 'failed', filepath: '', pageTitle, error: e.message });
       }
+    }
+
+    // Step 3: Generate AI Alt-Texts in a single batch request
+    event.reply('capture-status', { 
+      text: 'Analyzing all screenshots with Gemini AI...', 
+      progress: 85 
+    });
+
+    let results = [];
+    try {
+      const validPages = pagesData.filter(p => p.filename !== 'failed');
+      
+      if (validPages.length > 0) {
+        const rawAltTextResponse = await generateAllAltTexts(validPages);
+        results = parseMultiPageAltTexts(rawAltTextResponse, validPages);
+      }
+      
+      // Merge back failed pages
+      pagesData.forEach(p => {
+        if (p.filename === 'failed') {
+          results.push({
+            url: p.url,
+            filename: 'failed',
+            pageTitle: p.pageTitle,
+            altText: `Failed to capture page: ${p.error}`
+          });
+        }
+      });
+    } catch (err) {
+      results = pagesData.map(p => ({
+        url: p.url,
+        filename: p.filename,
+        pageTitle: p.pageTitle,
+        altText: `Failed to generate alt-text: ${err.message}`
+      }));
     }
 
     // Write the accessibility report HTML file
