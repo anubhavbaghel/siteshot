@@ -118,7 +118,7 @@ async function generateAltText(imagePath) {
     const payload = {
       contents: [{
         parts: [
-          { text: "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images. Format the output with the image name/location on one line, followed by the alt-text on the next line (with no bullet points, hyphens, or prefixes on the alt-text line itself) so it can be double-clicked to select and copy." },
+          { text: "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images. Format the output with the image name/location on one line, followed by the alt-text on the next line (with no bullet points, hyphens, or prefixes on the alt-text line itself) so it can be double-clicked to select and copy. Do not include any introduction, greetings, or explanations. Start directly with the first image name." },
           {
             inlineData: {
               mimeType: "image/png",
@@ -482,12 +482,49 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
       const lines = r.altText.split('\n').map(l => l.trim()).filter(Boolean);
       let altBlocksHtml = '';
       
-      for (let j = 0; j < lines.length; j += 2) {
-        const label = lines[j];
-        const text = lines[j + 1] || 'No description.';
+      const blocks = [];
+      let currentLabel = '';
+      let currentContent = '';
+      
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j];
+        const cleanLine = line.replace(/^[-*\d.\s]+/, '').replace(/:$/, '').trim();
         
-        const cleanLabel = label.replace(/^[-*\s]+/, '').replace(/:$/, '').trim();
-        const cleanText = text.replace(/^[-*\s]+/, '').trim();
+        // Smart Heuristic: Is this line a new image label/heading?
+        const endsWithColon = line.endsWith(':');
+        const hasHeadingWord = /\b(image|heading|logo|banner|gallery|icon|section|button|title|nav|header|footer)\b/i.test(line);
+        // Short, single line, no common description words
+        const isShortLabel = line.length < 55 && !/\b(with|showing|features|representing|depicts|sitting|standing|holding|carrying|located|placed)\b/i.test(line);
+        
+        const isNewLabel = (endsWithColon || hasHeadingWord || isShortLabel) && (line.length < 75);
+        
+        if (isNewLabel) {
+          if (currentLabel || currentContent) {
+            blocks.push({
+              label: currentLabel || 'Image Description',
+              text: currentContent || 'No description generated.'
+            });
+          }
+          currentLabel = cleanLine;
+          currentContent = '';
+        } else {
+          if (!currentLabel) {
+            currentLabel = 'Image Description';
+          }
+          currentContent += (currentContent ? '\n' : '') + line;
+        }
+      }
+      
+      if (currentLabel || currentContent) {
+        blocks.push({
+          label: currentLabel || 'Image Description',
+          text: currentContent || 'No description generated.'
+        });
+      }
+      
+      for (const block of blocks) {
+        const cleanLabel = block.label.replace(/^[-*\s]+/, '').replace(/:$/, '').trim();
+        const cleanText = block.text.replace(/^[-*\s]+/, '').trim();
         
         altBlocksHtml += `
           <div class="alt-block" onclick="copyAltText(this)">
