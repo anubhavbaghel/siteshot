@@ -501,56 +501,31 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
       const lines = r.altText.split('\n').map(l => l.trim()).filter(Boolean);
       let altBlocksHtml = '';
       
-      const blocks = [];
-      let currentLabel = '';
-      let currentContent = '';
-      
-      for (let j = 0; j < lines.length; j++) {
-        const line = lines[j];
-        const cleanLine = line.replace(/^[-*\d.\s]+/, '').replace(/:$/, '').trim();
-        
-        // Smart Heuristic: Is this line a new image label/heading?
-        const endsWithColon = line.endsWith(':');
-        const hasHeadingWord = /\b(image|heading|logo|banner|gallery|icon|section|button|title|nav|header|footer)\b/i.test(line);
-        // Short, single line, no common description words
-        const isShortLabel = line.length < 55 && !/\b(with|showing|features|representing|depicts|sitting|standing|holding|carrying|located|placed)\b/i.test(line);
-        
-        const isNewLabel = (endsWithColon || hasHeadingWord || isShortLabel) && (line.length < 75);
-        
-        if (isNewLabel) {
-          if (currentLabel || currentContent) {
-            blocks.push({
-              label: currentLabel || 'Image Description',
-              text: currentContent || 'No description generated.'
-            });
-          }
-          currentLabel = cleanLine;
-          currentContent = '';
-        } else {
-          if (!currentLabel) {
-            currentLabel = 'Image Description';
-          }
-          currentContent += (currentContent ? '\n' : '') + line;
-        }
-      }
-      
-      if (currentLabel || currentContent) {
-        blocks.push({
-          label: currentLabel || 'Image Description',
-          text: currentContent || 'No description generated.'
-        });
-      }
-      
-      for (const block of blocks) {
-        const cleanLabel = block.label.replace(/^[-*\s]+/, '').replace(/:$/, '').trim();
-        const cleanText = block.text.replace(/^[-*\s]+/, '').trim();
-        
+      // If the response is a single line (like an error message), render it directly
+      if (lines.length === 1) {
+        const cleanText = lines[0].replace(/^[-*\s]+/, '').replace(/:$/, '').trim();
         altBlocksHtml += `
           <div class="alt-block" onclick="copyAltText(this)">
-            <div class="image-label">${cleanLabel}</div>
+            <div class="image-label">${cleanText.includes('Failed') || cleanText.includes('Error') ? 'Error Status' : 'Image Description'}</div>
             <div class="alt-text-content">${cleanText}</div>
             <span class="copy-hint">Click to copy</span>
           </div>`;
+      } else {
+        // Strictly alternating pairs (Header, followed by description)
+        for (let j = 0; j < lines.length; j += 2) {
+          const label = lines[j];
+          const text = lines[j + 1] || 'No description generated.';
+          
+          const cleanLabel = label.replace(/^[-*\s\d.]+(\s+)?/, '').replace(/:$/, '').trim();
+          const cleanText = text.replace(/^[-*\s]+/, '').trim();
+          
+          altBlocksHtml += `
+            <div class="alt-block" onclick="copyAltText(this)">
+              <div class="image-label">${cleanLabel}</div>
+              <div class="alt-text-content">${cleanText}</div>
+              <span class="copy-hint">Click to copy</span>
+            </div>`;
+        }
       }
 
       htmlContent += `
