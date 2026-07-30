@@ -118,7 +118,7 @@ async function generateAltText(imagePath) {
     const payload = {
       contents: [{
         parts: [
-          { text: "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images" },
+          { text: "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images. Format the output with the image name/location on one line, followed by the alt-text on the next line (with no bullet points, hyphens, or prefixes on the alt-text line itself) so it can be double-clicked to select and copy." },
           {
             inlineData: {
               mimeType: "image/png",
