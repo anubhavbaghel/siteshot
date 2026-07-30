@@ -24,6 +24,13 @@
     },
     "directories": {
       "output": "dist-installer"
-    }
+    },
+    "files": [
+      "**/*",
+      "!dist${/*}",
+      "!dist-installer${/*}",
+      "!.git${/*}",
+      "!build.js"
+    ]
   }
 }
