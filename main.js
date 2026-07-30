@@ -194,13 +194,13 @@ function parseMultiPageAltTexts(rawText, pagesData) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    // Normalize and search if this line is a page title separator
-    const cleanLine = line.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    // Strict exact comparison (ignoring "Page:" prefix and non-alphanumeric chars)
+    const cleanLine = line.replace(/^(page|screenshot\s+\d+)\b/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     
     let matchedIndex = -1;
     for (let j = 0; j < pagesData.length; j++) {
       const cleanTitle = pagesData[j].pageTitle.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      if (cleanLine === cleanTitle || (cleanLine.length > 5 && (cleanLine.includes(cleanTitle) || cleanTitle.includes(cleanLine)))) {
+      if (cleanLine === cleanTitle) {
         matchedIndex = j;
         break;
       }
