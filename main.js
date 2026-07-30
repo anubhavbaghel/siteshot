@@ -110,41 +110,60 @@ const GEMINI_API_KEY = getDecryptedApiKey();
 
 // Helper to generate alt-text using Gemini API
 async function generateAltText(imagePath) {
-  try {
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Image = imageBuffer.toString('base64');
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
-    
-    const payload = {
-      contents: [{
-        parts: [
-          { text: "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images. Format the output with the image name/location on one line, followed by the alt-text on the next line (with no bullet points, hyphens, or prefixes on the alt-text line itself) so it can be double-clicked to select and copy. Do not include any introduction, greetings, or explanations. Start directly with the first image name." },
-          {
-            inlineData: {
-              mimeType: "image/png",
-              data: base64Image
+  let retries = 4;
+  let delay = 3000; // start with 3 seconds
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const imageBuffer = fs.readFileSync(imagePath);
+      const base64Image = imageBuffer.toString('base64');
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+      
+      const payload = {
+        contents: [{
+          parts: [
+            { text: "i will provide you screenshot of the website so you can write alt keep it precise , meaningfull, and short , united kingdowm counrty lang an d125 char words without full stop,you have to write only images and all the headings have images so you can write alt respective heaing and gallery images. Format the output with the image name/location on one line, followed by the alt-text on the next line (with no bullet points, hyphens, or prefixes on the alt-text line itself) so it can be double-clicked to select and copy. Do not include any introduction, greetings, or explanations. Start directly with the first image name." },
+            {
+              inlineData: {
+                mimeType: "image/png",
+                data: base64Image
+              }
             }
-          }
-        ]
-      }]
-    };
+          ]
+        }]
+      };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return `Failed to generate alt-text (${response.status})`;
+      if (response.status === 429) {
+        if (attempt < retries - 1) {
+          console.warn(`Rate limit hit (429). Retrying in ${delay / 1000}s... (Attempt ${attempt + 1}/${retries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // exponential backoff
+          continue;
+        }
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        return `Failed to generate alt-text (${response.status})`;
+      }
+
+      const result = await response.json();
+      const description = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      return description ? description.trim() : 'No description generated.';
+    } catch (err) {
+      if (attempt < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        continue;
+      }
+      return `Error: ${err.message}`;
     }
-
-    const result = await response.json();
-    const description = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    return description ? description.trim() : 'No description generated.';
-  } catch (err) {
-    return `Error: ${err.message}`;
   }
 }
 
