@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "package": "electron-packager . SiteShot --platform=win32 --arch=x64 --out=dist --overwrite",
-    "build": "electron-builder --win"
+    "build": "node build.js"
   },
   "dependencies": {
     "puppeteer-core": "^21.6.0"
