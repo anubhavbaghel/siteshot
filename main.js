@@ -106,7 +106,7 @@ function getDecryptedApiKey() {
   return result;
 }
 
-const GEMINI_API_KEY = getDecryptedApiKey();
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || getDecryptedApiKey();
 
 // Helper to generate alt-text using Gemini API
 async function generateAltText(imagePath) {
