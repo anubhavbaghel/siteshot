@@ -42,12 +42,16 @@ window.api.onStatus((status) => {
   statusText.textContent = status.text;
 });
 
+const openReportBtn = document.getElementById('open-report-btn');
+let outputReportPath = '';
+
 // Listen for completion
-window.api.onComplete((folderPath) => {
+window.api.onComplete((data) => {
   progressContainer.classList.add('hidden');
   resultContainer.classList.remove('hidden');
   
-  outputFolderPath = folderPath;
+  outputFolderPath = data.folderPath;
+  outputReportPath = data.reportPath;
 
   // Re-enable inputs
   urlInput.disabled = false;
@@ -70,5 +74,12 @@ window.api.onError((errMessage) => {
 openBtn.addEventListener('click', () => {
   if (outputFolderPath) {
     window.api.openFolder(outputFolderPath);
+  }
+});
+
+// Open report action
+openReportBtn.addEventListener('click', () => {
+  if (outputReportPath) {
+    window.api.openFolder(outputReportPath);
   }
 });

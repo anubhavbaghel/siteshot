@@ -671,10 +671,11 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
 </body>
 </html>`;
 
-    fs.writeFileSync(path.join(outputDir, `Siteshot_${siteName}_Alts.html`), htmlContent, 'utf-8');
+    const reportPath = path.join(outputDir, `Siteshot_${siteName}_Alts.html`);
+    fs.writeFileSync(reportPath, htmlContent, 'utf-8');
 
     await browser.close();
-    event.reply('capture-complete', outputDir);
+    event.reply('capture-complete', { folderPath: outputDir, reportPath });
   } catch (err) {
     if (browser) await browser.close();
     event.reply('capture-error', err.message);

@@ -131,6 +131,24 @@ button:disabled {
   background-color: #4a4a4a;
 }
 
+.button-group {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+}
+
+#open-report-btn {
+  background-color: #007acc;
+  color: #ffffff;
+  width: auto;
+}
+
+#open-report-btn:hover {
+  background-color: #0062a3;
+}
+
 /* Error Container */
 #error-container {
   margin-top: 20px;
