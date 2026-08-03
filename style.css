@@ -41,7 +41,7 @@ form {
   gap: 12px;
 }
 
-input[type="url"] {
+input[type="url"], input[type="password"] {
   padding: 10px 14px;
   border: 1px solid #3c3c3c;
   border-radius: 4px;
@@ -51,7 +51,7 @@ input[type="url"] {
   outline: none;
 }
 
-input[type="url"]:focus {
+input[type="url"]:focus, input[type="password"]:focus {
   border-color: #007acc;
 }
 

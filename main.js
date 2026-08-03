@@ -94,22 +94,8 @@ async function autoScroll(page) {
   await new Promise(r => setTimeout(r, 2000));
 }
 
-const ENCODED_XOR_KEY = 'ChplCilzGQV9AT8hIz8lGgkCHgQmBxEHJS84GQl7EgUxHj0cOQUHJjMuLDEKADkqfGY9ESw=';
-
-function getDecryptedApiKey() {
-  const xorStr = Buffer.from(ENCODED_XOR_KEY, 'base64').toString('utf-8');
-  let result = '';
-  const keyChar = 'K';
-  for (let i = 0; i < xorStr.length; i++) {
-    result += String.fromCharCode(xorStr.charCodeAt(i) ^ keyChar.charCodeAt(0));
-  }
-  return result;
-}
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || getDecryptedApiKey();
-
 // Helper to generate alt-text for all captured pages in a single API call
-async function generateAllAltTexts(pagesData) {
+async function generateAllAltTexts(pagesData, apiKey) {
   let retries = 4;
   let delay = 4000; // start with 4 seconds
   
@@ -140,7 +126,7 @@ async function generateAllAltTexts(pagesData) {
         });
       });
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
       const payload = { contents: [{ parts }] };
 
       const response = await fetch(url, {
@@ -242,7 +228,7 @@ function getSafeFilename(urlStr) {
 }
 
 // IPC listener for starting capture
-ipcMain.on('start-capture', async (event, targetUrl) => {
+ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
   const chromePath = findChromePath();
   if (!chromePath) {
     event.reply('capture-error', 'Could not locate Google Chrome. Please install Chrome to use this app.');
@@ -378,7 +364,7 @@ ipcMain.on('start-capture', async (event, targetUrl) => {
       const validPages = pagesData.filter(p => p.filename !== 'failed');
       
       if (validPages.length > 0) {
-        const rawAltTextResponse = await generateAllAltTexts(validPages);
+        const rawAltTextResponse = await generateAllAltTexts(validPages, userApiKey);
         results = parseMultiPageAltTexts(rawAltTextResponse, validPages);
       }
       

@@ -1,4 +1,5 @@
 const form = document.getElementById('capture-form');
+const apiKeyInput = document.getElementById('api-key-input');
 const urlInput = document.getElementById('url-input');
 const submitBtn = document.getElementById('submit-btn');
 
@@ -8,17 +9,29 @@ const statusText = document.getElementById('status-text');
 
 const resultContainer = document.getElementById('result-container');
 const openBtn = document.getElementById('open-btn');
+const openReportBtn = document.getElementById('open-report-btn');
 
 const errorContainer = document.getElementById('error-container');
 const errorText = document.getElementById('error-text');
 
 let outputFolderPath = '';
+let outputReportPath = '';
+
+// Load saved API Key from localStorage
+const savedKey = localStorage.getItem('gemini_api_key');
+if (savedKey) {
+  apiKeyInput.value = savedKey;
+}
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   
+  const apiKey = apiKeyInput.value.trim();
   const url = urlInput.value.trim();
-  if (!url) return;
+  if (!apiKey || !url) return;
+
+  // Save API Key locally
+  localStorage.setItem('gemini_api_key', apiKey);
 
   // Reset UI
   errorContainer.classList.add('hidden');
@@ -29,11 +42,12 @@ form.addEventListener('submit', (e) => {
   statusText.textContent = 'Connecting...';
 
   // Disable inputs
+  apiKeyInput.disabled = true;
   urlInput.disabled = true;
   submitBtn.disabled = true;
 
-  // Send request
-  window.api.startCapture(url);
+  // Send request with both URL and API Key
+  window.api.startCapture(url, apiKey);
 });
 
 // Listen to progress updates
@@ -41,9 +55,6 @@ window.api.onStatus((status) => {
   progressBar.style.width = `${status.progress}%`;
   statusText.textContent = status.text;
 });
-
-const openReportBtn = document.getElementById('open-report-btn');
-let outputReportPath = '';
 
 // Listen for completion
 window.api.onComplete((data) => {
@@ -54,6 +65,7 @@ window.api.onComplete((data) => {
   outputReportPath = data.reportPath;
 
   // Re-enable inputs
+  apiKeyInput.disabled = false;
   urlInput.disabled = false;
   submitBtn.disabled = false;
 });
@@ -66,6 +78,7 @@ window.api.onError((errMessage) => {
   errorContainer.classList.remove('hidden');
 
   // Re-enable inputs
+  apiKeyInput.disabled = false;
   urlInput.disabled = false;
   submitBtn.disabled = false;
 });

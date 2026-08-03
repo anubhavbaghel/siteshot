@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-  startCapture: (url) => ipcRenderer.send('start-capture', url),
+  startCapture: (url, apiKey) => ipcRenderer.send('start-capture', url, apiKey),
   openFolder: (path) => ipcRenderer.send('open-folder', path),
   onStatus: (callback) => ipcRenderer.on('capture-status', (event, data) => callback(data)),
   onComplete: (callback) => ipcRenderer.on('capture-complete', (event, path) => callback(path)),
