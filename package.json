@@ -1,6 +1,6 @@
 {
   "name": "siteshot-desktop",
-  "version": "1.9.7",
+  "version": "1.9.8",
   "description": "Ultra-lightweight functional website screenshot crawler",
   "author": "SiteShot Team",
   "main": "main.js",
