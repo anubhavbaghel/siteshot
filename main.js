@@ -404,6 +404,7 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       --accent: #3b82f6;
       --accent-hover: #2563eb;
       --success: #10b981;
+      --danger: #ef4444;
       --border: #334155;
     }
     body {
@@ -499,8 +500,8 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       gap: 1rem;
     }
     .alt-block {
-      background-color: rgba(0, 0, 0, 0.2);
-      border: 1px solid var(--border);
+      background-color: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
       border-radius: 8px;
       padding: 1rem 1.2rem;
       position: relative;
@@ -508,8 +509,8 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       transition: border-color 0.2s, background-color 0.2s;
     }
     .alt-block:hover {
-      border-color: var(--accent);
-      background-color: rgba(59, 130, 246, 0.05);
+      border-color: var(--success);
+      background-color: rgba(16, 185, 129, 0.18);
     }
     .image-label {
       font-size: 0.85rem;
@@ -526,8 +527,12 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       white-space: pre-wrap;
     }
     .alt-block.copied {
-      border-color: var(--success) !important;
-      background-color: rgba(16, 185, 129, 0.08) !important;
+      border-color: var(--danger) !important;
+      background-color: rgba(239, 68, 68, 0.12) !important;
+    }
+    .alt-block.copied:hover {
+      background-color: rgba(239, 68, 68, 0.22) !important;
+      border-color: rgba(239, 68, 68, 0.8) !important;
     }
     .copy-hint {
       position: absolute;
@@ -641,10 +646,7 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
         const toast = document.getElementById('toast');
         toast.innerText = 'Copied: "' + (text.length > 40 ? text.substring(0, 40) + '...' : text) + '"';
         toast.classList.add('show');
-        
-        setTimeout(() => {
-          element.classList.remove('copied');
-        }, 1000);
+        // Stays copied (red background) permanently
         
         setTimeout(() => {
           toast.classList.remove('show');
