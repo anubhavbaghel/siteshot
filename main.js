@@ -227,6 +227,16 @@ function getSafeFilename(urlStr) {
   }
 }
 
+// Helper to normalize URL as key for matching titles/duplicates (ignores search params and hash)
+function getNormalizedUrlKey(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    return (u.origin + u.pathname).replace(/\/$/, '');
+  } catch (e) {
+    return urlStr.split('#')[0].split('?')[0].replace(/\/$/, '');
+  }
+}
+
 // IPC listener for starting capture
 ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
   const chromePath = findChromePath();
@@ -274,11 +284,11 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
     
     await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
     pagesToCapture.push(targetUrl);
-    visitedUrls.add(targetUrl.split('#')[0].replace(/\/$/, ''));
+    visitedUrls.add(getNormalizedUrlKey(targetUrl));
     
     let landingTitle = await page.title();
     landingTitle = landingTitle ? landingTitle.trim() : 'Home';
-    pageTitles[targetUrl.split('#')[0].replace(/\/$/, '')] = landingTitle;
+    pageTitles[getNormalizedUrlKey(targetUrl)] = landingTitle;
 
     const links = await page.evaluate(() => {
       return Array.from(document.querySelectorAll('a'))
@@ -293,7 +303,21 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       try {
         const linkParsed = new URL(item.href);
         if (linkParsed.hostname === startUrlParsed.hostname) {
-          const normalized = item.href.split('#')[0].replace(/\/$/, '');
+          // Merge query parameters from landing page to stay in preview/test context
+          let linkUrl = item.href;
+          if (startUrlParsed.search) {
+            try {
+              const u = new URL(linkUrl);
+              for (const [key, value] of startUrlParsed.searchParams.entries()) {
+                if (!u.searchParams.has(key)) {
+                  u.searchParams.set(key, value);
+                }
+              }
+              linkUrl = u.toString();
+            } catch (e) {}
+          }
+
+          const normalized = getNormalizedUrlKey(linkUrl);
           
           if (!pageTitles[normalized]) {
             let cleanText = item.text.replace(/[\r\n\t]+/g, ' ').trim();
@@ -312,7 +336,7 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
 
           if (!visitedUrls.has(normalized)) {
             visitedUrls.add(normalized);
-            pagesToCapture.push(item.href);
+            pagesToCapture.push(linkUrl);
           }
         }
       } catch (err) {}
@@ -332,7 +356,7 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
         progress: progressPercent 
       });
 
-      const normalizedUrl = url.split('#')[0].replace(/\/$/, '');
+      const normalizedUrl = getNormalizedUrlKey(url);
       const pageTitle = pageTitles[normalizedUrl] || 'Home';
 
       try {
