@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #3c3c3c;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    h2 {
+      margin: 0;
+      font-size: 16px;
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .icon-btn {
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      color: #8e8e8e;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .icon-btn:hover {
+      color: #ffffff;
+      background-color: rgba(255,255,255,0.1);
+    }
+    .hidden {
+      display: none !important;
+    }
+    .view {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    button.primary-btn {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      background-color: #007acc;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button.primary-btn:hover {
+      background-color: #0062a3;
+    }
+    button.primary-btn:disabled {
+      background-color: #444444;
+      color: #888888;
+      cursor: not-allowed;
+    }
+    button.secondary-btn {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #555555;
+      border-radius: 4px;
+      background-color: #3c3c3c;
+      color: #ffffff;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.secondary-btn:hover {
+      background-color: #4a4a4a;
+    }
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    label {
+      font-size: 11px;
+      color: #8e8e8e;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    input[type="password"], input[type="text"], select {
+      padding: 8px 10px;
+      border: 1px solid #3c3c3c;
+      border-radius: 4px;
+      background-color: #3c3c3c;
+      color: #ffffff;
+      font-size: 13px;
+      outline: none;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    input[type="password"]:focus, input[type="text"]:focus, select:focus {
+      border-color: #007acc;
+    }
+    #status-text {
+      font-size: 12px;
+      color: #8e8e8e;
+      margin: 0;
+      text-align: center;
+    }
+    .status-success {
+      color: #4ec9b0;
+    }
+    .status-error {
+      color: #f48771;
+      font-size: 11px;
+      word-break: break-all;
+    }
+    #image-list {
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid #3c3c3c;
+      border-radius: 4px;
+      background-color: #252526;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .image-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px;
+      background-color: #1e1e1e;
+      border-radius: 3px;
+      border-left: 3px solid #007acc;
+    }
+    .image-info {
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+    }
+    .copy-btn {
+      background-color: #3c3c3c;
+      border: 1px solid #555555;
+      color: #ffffff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .copy-btn:hover {
+      background-color: #4a4a4a;
+    }
+    .copy-btn.copied {
+      background-color: #10b981;
+      border-color: #10b981;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>SiteShot - In-Page Alt</h2>
+    <button id="settings-toggle-btn" class="icon-btn" title="Gemini API Key Settings">⚙️</button>
+  </div>
+
+  <!-- Main View -->
+  <div id="main-view" class="view">
+    <button id="analyze-btn" class="primary-btn">Analyze Page Images</button>
+    <button id="toggle-overlays-btn" class="secondary-btn" disabled>Show Alt Overlays</button>
+    <p id="status-text">Enter your API key in Settings, then click Analyze.</p>
+    <div id="image-list-container" class="hidden">
+      <label>Images Detected</label>
+      <div id="image-list"></div>
+    </div>
+  </div>
+
+  <!-- Settings View -->
+  <div id="settings-view" class="view hidden">
+    <div class="input-group">
+      <label for="provider-select">AI Provider</label>
+      <select id="provider-select">
+        <option value="gemini">Google Gemini</option>
+        <option value="ollama">Local Ollama</option>
+      </select>
+    </div>
+    
+    <div id="gemini-settings" class="input-group">
+      <label for="api-key-input">Google AI Studio API Key</label>
+      <input type="password" id="api-key-input" placeholder="Paste your API key here">
+    </div>
+
+    <div id="ollama-settings" class="input-group hidden" style="gap: 6px;">
+      <label for="ollama-url-input">Ollama Server URL</label>
+      <input type="text" id="ollama-url-input" value="http://localhost:11434">
+      <label for="ollama-model-select">Ollama Model</label>
+      <select id="ollama-model-select">
+        <option value="llava">Llava (Accurate, 7B)</option>
+        <option value="moondream">Moondream (Super Fast, 1.8B)</option>
+        <option value="custom">Custom Model...</option>
+      </select>
+      <input type="text" id="ollama-model-input" class="hidden" placeholder="Enter custom model name">
+    </div>
+
+    <button id="save-key-btn" class="primary-btn">Save Settings</button>
+    <button id="back-btn" class="secondary-btn">Back</button>
+    <p id="settings-status" class="hidden" style="text-align: center; font-size: 12px; color: #4ec9b0; margin: 0;"></p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

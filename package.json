@@ -29,6 +29,7 @@
       "**/*",
       "!dist${/*}",
       "!dist-installer${/*}",
+      "!extension${/*}",
       "!.git${/*}",
       "!build.js"
     ]
