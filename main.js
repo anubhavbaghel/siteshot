@@ -135,9 +135,9 @@ async function generateAllAltTexts(pagesData, apiKey) {
         body: JSON.stringify(payload)
       });
 
-      if (response.status === 429) {
+      if (response.status === 429 || response.status === 503) {
         if (attempt < retries - 1) {
-          console.warn(`Rate limit hit (429). Retrying in ${delay / 1000}s... (Attempt ${attempt + 1}/${retries})`);
+          console.warn(`Rate limit or high demand hit (${response.status}). Retrying in ${delay / 1000}s... (Attempt ${attempt + 1}/${retries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2; // exponential backoff
           continue;
