@@ -149,6 +149,16 @@ button:disabled {
   background-color: #0062a3;
 }
 
+.retry-btn {
+  background-color: #d97706;
+  color: #ffffff;
+  width: auto;
+}
+
+.retry-btn:hover {
+  background-color: #b45309;
+}
+
 /* Error Container */
 #error-container {
   margin-top: 20px;

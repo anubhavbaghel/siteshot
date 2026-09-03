@@ -29,15 +29,17 @@
       </div>
 
       <div id="result-container" class="hidden">
-        <p class="success-msg">✓ Screenshots captured successfully!</p>
+        <p class="success-msg" id="result-msg">✓ Screenshots captured successfully!</p>
         <div class="button-group">
-          <button id="open-btn">Open Screenshots Folder</button>
+          <button id="open-btn">Open Folder</button>
           <button id="open-report-btn">Open Alt Report</button>
+          <button id="retry-alt-btn" class="retry-btn" title="Re-run AI analysis on existing screenshots without re-crawling">Retry AI Alt-Text</button>
         </div>
       </div>
 
       <div id="error-container" class="hidden">
         <p id="error-text"></p>
+        <button id="error-retry-alt-btn" class="retry-btn hidden" style="margin-top: 10px;">Retry AI Alt-Text (Use Existing Screenshots)</button>
       </div>
     </div>
 

@@ -95,8 +95,8 @@ async function autoScroll(page) {
 }
 
 // Helper to generate alt-text for all captured pages in a single API call
-async function generateAllAltTexts(pagesData, apiKey) {
-  let retries = 4;
+async function generateAllAltTexts(pagesData, apiKey, event = null) {
+  let retries = 8;
   let delay = 4000; // start with 4 seconds
   
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -126,7 +126,8 @@ async function generateAllAltTexts(pagesData, apiKey) {
         });
       });
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+      const modelName = (attempt >= 2 && attempt % 2 === 1) ? 'gemini-1.5-flash' : 'gemini-flash-latest';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
       const payload = { contents: [{ parts }] };
 
       const response = await fetch(url, {
@@ -137,9 +138,16 @@ async function generateAllAltTexts(pagesData, apiKey) {
 
       if (response.status === 429 || response.status === 503) {
         if (attempt < retries - 1) {
-          console.warn(`Rate limit or high demand hit (${response.status}). Retrying in ${delay / 1000}s... (Attempt ${attempt + 1}/${retries})`);
+          const waitSec = Math.round(delay / 1000);
+          console.warn(`Rate limit or high demand hit (${response.status}). Retrying in ${waitSec}s... (Attempt ${attempt + 1}/${retries})`);
+          if (event) {
+            event.reply('capture-status', {
+              text: `AI service busy (${response.status}). Retrying automatically in ${waitSec}s... (Attempt ${attempt + 1}/${retries})`,
+              progress: 85 + Math.min(Math.round(((attempt + 1) / retries) * 10), 10)
+            });
+          }
           await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2; // exponential backoff
+          delay = Math.min(delay * 1.5, 30000); // exponential backoff capped at 30s
           continue;
         }
       }
@@ -154,8 +162,16 @@ async function generateAllAltTexts(pagesData, apiKey) {
       return description ? description.trim() : '';
     } catch (err) {
       if (attempt < retries - 1) {
+        const waitSec = Math.round(delay / 1000);
+        console.warn(`API connection issue (${err.message}). Retrying in ${waitSec}s... (Attempt ${attempt + 1}/${retries})`);
+        if (event) {
+          event.reply('capture-status', {
+            text: `AI connecting... Retrying automatically in ${waitSec}s... (Attempt ${attempt + 1}/${retries})`,
+            progress: 85 + Math.min(Math.round(((attempt + 1) / retries) * 10), 10)
+          });
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
+        delay = Math.min(delay * 1.5, 30000);
         continue;
       }
       throw err;
@@ -236,6 +252,8 @@ function getNormalizedUrlKey(urlStr) {
     return urlStr.split('#')[0].split('?')[0].replace(/\/$/, '');
   }
 }
+
+let lastRunContext = null;
 
 // IPC listener for starting capture
 ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
@@ -377,6 +395,13 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       }
     }
 
+    // Close browser as soon as all screenshots are finished to free memory
+    await browser.close();
+    browser = null;
+
+    const reportPath = path.join(outputDir, `Siteshot_${siteName}_Alts.html`);
+    lastRunContext = { siteName, outputDir, reportPath, pagesData };
+
     // Step 3: Generate AI Alt-Texts in a single batch request
     event.reply('capture-status', { 
       text: 'Analyzing all screenshots with Gemini AI...', 
@@ -384,11 +409,12 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
     });
 
     let results = [];
+    let hasAiError = false;
     try {
       const validPages = pagesData.filter(p => p.filename !== 'failed');
       
       if (validPages.length > 0) {
-        const rawAltTextResponse = await generateAllAltTexts(validPages, userApiKey);
+        const rawAltTextResponse = await generateAllAltTexts(validPages, userApiKey, event);
         results = parseMultiPageAltTexts(rawAltTextResponse, validPages);
       }
       
@@ -404,6 +430,7 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
         }
       });
     } catch (err) {
+      hasAiError = true;
       results = pagesData.map(p => ({
         url: p.url,
         filename: p.filename,
@@ -412,8 +439,19 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       }));
     }
 
-    // Write the accessibility report HTML file
-    let htmlContent = `<!DOCTYPE html>
+    const htmlContent = buildHtmlReport(siteName, results);
+    fs.writeFileSync(reportPath, htmlContent, 'utf-8');
+
+    event.reply('capture-complete', { folderPath: outputDir, reportPath, hasAiError });
+  } catch (err) {
+    if (browser) await browser.close();
+    event.reply('capture-error', err.message);
+  }
+});
+
+// Helper to construct HTML accessibility report
+function buildHtmlReport(siteName, results) {
+  let htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -603,58 +641,58 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
   <div class="container">
 `;
 
-    for (const r of results) {
-      const lines = r.altText.split('\n').map(l => l.trim()).filter(Boolean);
-      let altBlocksHtml = '';
-      
-      // If the response is a single line (like an error message), render it directly
-      if (lines.length === 1) {
-        const cleanText = lines[0].replace(/^[-*\s]+/, '').replace(/:$/, '').trim();
+  for (const r of results) {
+    const lines = r.altText.split('\n').map(l => l.trim()).filter(Boolean);
+    let altBlocksHtml = '';
+    
+    // If the response is a single line (like an error message), render it directly
+    if (lines.length === 1) {
+      const cleanText = lines[0].replace(/^[-*\s]+/, '').replace(/:$/, '').trim();
+      altBlocksHtml += `
+        <div class="alt-block" onclick="copyAltText(this)">
+          <div class="image-label">${cleanText.includes('Failed') || cleanText.includes('Error') ? 'Error Status' : 'Image Description'}</div>
+          <div class="alt-text-content">${cleanText}</div>
+          <span class="copy-hint">Click to copy</span>
+        </div>`;
+    } else {
+      // Strictly alternating pairs (Header, followed by description)
+      for (let j = 0; j < lines.length; j += 2) {
+        const label = lines[j];
+        const text = lines[j + 1] || 'No description generated.';
+        
+        const cleanLabel = label.replace(/^[-*\s\d.]+(\s+)?/, '').replace(/:$/, '').trim();
+        const cleanText = text.replace(/^[-*\s]+/, '').trim();
+        
         altBlocksHtml += `
           <div class="alt-block" onclick="copyAltText(this)">
-            <div class="image-label">${cleanText.includes('Failed') || cleanText.includes('Error') ? 'Error Status' : 'Image Description'}</div>
+            <div class="image-label">${cleanLabel}</div>
             <div class="alt-text-content">${cleanText}</div>
             <span class="copy-hint">Click to copy</span>
           </div>`;
-      } else {
-        // Strictly alternating pairs (Header, followed by description)
-        for (let j = 0; j < lines.length; j += 2) {
-          const label = lines[j];
-          const text = lines[j + 1] || 'No description generated.';
-          
-          const cleanLabel = label.replace(/^[-*\s\d.]+(\s+)?/, '').replace(/:$/, '').trim();
-          const cleanText = text.replace(/^[-*\s]+/, '').trim();
-          
-          altBlocksHtml += `
-            <div class="alt-block" onclick="copyAltText(this)">
-              <div class="image-label">${cleanLabel}</div>
-              <div class="alt-text-content">${cleanText}</div>
-              <span class="copy-hint">Click to copy</span>
-            </div>`;
-        }
       }
-
-      htmlContent += `
-    <div class="page-section">
-      <div class="page-header">
-        <h2>${r.pageTitle}</h2>
-      </div>
-      <div class="page-content">
-        <div class="screenshot-column">
-          <a href="${r.filename}" target="_blank">
-            <img class="screenshot-thumbnail" src="${r.filename}" alt="${r.pageTitle} Screenshot">
-          </a>
-          <a class="screenshot-link" href="${r.filename}" target="_blank">View full-size screenshot</a>
-        </div>
-        <div class="alts-column">
-          ${altBlocksHtml || `<div style="color: var(--text-muted);">No images found or analyzed.</div>`}
-        </div>
-      </div>
-    </div>
-`;
     }
 
     htmlContent += `
+  <div class="page-section">
+    <div class="page-header">
+      <h2>${r.pageTitle}</h2>
+    </div>
+    <div class="page-content">
+      <div class="screenshot-column">
+        <a href="${r.filename}" target="_blank">
+          <img class="screenshot-thumbnail" src="${r.filename}" alt="${r.pageTitle} Screenshot">
+        </a>
+        <a class="screenshot-link" href="${r.filename}" target="_blank">View full-size screenshot</a>
+      </div>
+      <div class="alts-column">
+        ${altBlocksHtml || `<div style="color: var(--text-muted);">No images found or analyzed.</div>`}
+      </div>
+    </div>
+  </div>
+`;
+  }
+
+  htmlContent += `
   </div>
   <div class="toast-container" id="toast">Alt-text copied to clipboard!</div>
 
@@ -663,14 +701,11 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       const text = element.querySelector('.alt-text-content').innerText;
       
       navigator.clipboard.writeText(text).then(() => {
-        // Flash animation
         element.classList.add('copied');
         
-        // Show Toast
         const toast = document.getElementById('toast');
         toast.innerText = 'Copied: "' + (text.length > 40 ? text.substring(0, 40) + '...' : text) + '"';
         toast.classList.add('show');
-        // Stays copied (red background) permanently
         
         setTimeout(() => {
           toast.classList.remove('show');
@@ -683,14 +718,51 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
 </body>
 </html>`;
 
-    const reportPath = path.join(outputDir, `Siteshot_${siteName}_Alts.html`);
+  return htmlContent;
+}
+
+// IPC listener for Retrying Alt Generation on Existing Screenshots (No re-crawling)
+ipcMain.on('retry-alt-generation', async (event, userApiKey) => {
+  if (!lastRunContext || !lastRunContext.pagesData || lastRunContext.pagesData.length === 0) {
+    event.reply('capture-error', 'No previous screenshots found to retry. Please capture a website first.');
+    return;
+  }
+
+  const { siteName, outputDir, reportPath, pagesData } = lastRunContext;
+  const validPages = pagesData.filter(p => p.filename !== 'failed' && p.filepath && fs.existsSync(p.filepath));
+
+  if (validPages.length === 0) {
+    event.reply('capture-error', 'No valid screenshot files found from the previous run.');
+    return;
+  }
+
+  event.reply('capture-status', { 
+    text: 'Analyzing existing screenshots with Gemini AI (Skipping re-capture)...', 
+    progress: 85 
+  });
+
+  try {
+    const rawAltTextResponse = await generateAllAltTexts(validPages, userApiKey, event);
+    const results = parseMultiPageAltTexts(rawAltTextResponse, validPages);
+
+    // Merge back any failed pages
+    pagesData.forEach(p => {
+      if (p.filename === 'failed' || !results.some(r => r.url === p.url)) {
+        results.push({
+          url: p.url,
+          filename: p.filename || 'failed',
+          pageTitle: p.pageTitle,
+          altText: `Failed to capture page: ${p.error || 'Unknown'}`
+        });
+      }
+    });
+
+    const htmlContent = buildHtmlReport(siteName, results);
     fs.writeFileSync(reportPath, htmlContent, 'utf-8');
 
-    await browser.close();
-    event.reply('capture-complete', { folderPath: outputDir, reportPath });
+    event.reply('capture-complete', { folderPath: outputDir, reportPath, isRetry: true, hasAiError: false });
   } catch (err) {
-    if (browser) await browser.close();
-    event.reply('capture-error', err.message);
+    event.reply('capture-error', `Retry failed: ${err.message}. You can click Retry AI Alt-Text again.`);
   }
 });
 
