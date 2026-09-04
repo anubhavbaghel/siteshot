@@ -126,7 +126,7 @@ async function generateAllAltTexts(pagesData, apiKey, event = null) {
         });
       });
 
-      const modelName = (attempt >= 2 && attempt % 2 === 1) ? 'gemini-1.5-flash' : 'gemini-flash-latest';
+      const modelName = 'gemini-flash-latest';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
       const payload = { contents: [{ parts }] };
 
