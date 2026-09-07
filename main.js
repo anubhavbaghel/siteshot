@@ -301,6 +301,9 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
     event.reply('capture-status', { text: 'Discovering website pages...', progress: 10 });
     
     await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+    // Settle time for dynamic JS menus & SPA hydration (e.g. Wix, Webflow)
+    await new Promise(r => setTimeout(r, 3000));
+
     pagesToCapture.push(targetUrl);
     visitedUrls.add(getNormalizedUrlKey(targetUrl));
     
@@ -317,10 +320,17 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
         }));
     });
 
+    const startBasePath = startUrlParsed.pathname.replace(/\/$/, '');
+
     for (const item of links) {
       try {
         const linkParsed = new URL(item.href);
         if (linkParsed.hostname === startUrlParsed.hostname) {
+          // If the starting URL has a subsite path prefix (e.g. /website-66535), stay within that subsite
+          if (startBasePath && !linkParsed.pathname.startsWith(startBasePath)) {
+            continue;
+          }
+
           // Merge query parameters from landing page to stay in preview/test context
           let linkUrl = item.href;
           if (startUrlParsed.search) {
@@ -360,8 +370,9 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       } catch (err) {}
     }
 
-    // Limit to max 15 pages to keep it fast/lightweight
-    const totalPages = Math.min(pagesToCapture.length, 15);
+    // Allow crawling up to 50 pages
+    const MAX_PAGES = 50;
+    const totalPages = Math.min(pagesToCapture.length, MAX_PAGES);
     const pagesData = [];
 
     // Step 2: Capture screenshots
@@ -370,7 +381,7 @@ ipcMain.on('start-capture', async (event, targetUrl, userApiKey) => {
       const progressPercent = 20 + Math.round((i / totalPages) * 60); // 20% to 80% for capturing
       
       event.reply('capture-status', { 
-        text: `Capturing page ${i + 1}/${totalPages}...`, 
+        text: `Capturing page ${i + 1} of ${totalPages}...`, 
         progress: progressPercent 
       });
 
